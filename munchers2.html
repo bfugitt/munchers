@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Number Munchers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #151a3f;
+    --board: #212863;
+    --tile: #353e93;
+    --tile-edge: #232a6b;
+    --cream: #fff4d6;
+    --soft: #aab1e8;
+    --muncher: #7ee36b;
+    --muncher-dark: #2f7d2d;
+    --coral: #ff6b6b;
+    --violet: #b48cff;
+    --gold: #ffd23f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--night);
+    color: var(--cream);
+    font-family: Fredoka, "Trebuchet MS", system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  #app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ---------- Top status bar ---------- */
+  #hud {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 20px 4px;
+  }
+  .hud-level { justify-self: start; display: flex; align-items: baseline; gap: 8px; font-size: 20px; color: var(--soft); }
+  .hud-level b { font-size: 30px; color: var(--cream); font-weight: 700; }
+  .hud-rule { text-align: center; }
+  .hud-rule small { display: block; font-size: 15px; color: var(--soft); }
+  #hud-rule { font-size: clamp(24px, 3.4vw, 38px); font-weight: 700; color: var(--gold); line-height: 1.1; }
+  .hud-stats { justify-self: end; display: flex; align-items: center; gap: 20px; font-size: 20px; }
+  .stat { display: flex; align-items: center; gap: 6px; color: var(--soft); }
+  .stat b { color: var(--cream); font-weight: 600; }
+  .life { width: 20px; height: 20px; border-radius: 50%; background: var(--muncher); box-shadow: inset -3px -3px 0 var(--muncher-dark); }
+  .star { color: var(--gold); font-size: 22px; line-height: 1; }
+
+  /* ---------- Board ---------- */
+  #stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; }
+  canvas#board { display: block; touch-action: none; }
+
+  /* ---------- Bottom help bar (outside the board, so it never covers numbers) ---------- */
+  #help {
+    display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 24px;
+    padding: 6px 16px 12px; color: var(--soft); font-size: 16px;
+  }
+  #help span { white-space: nowrap; }
+  kbd {
+    font-family: inherit; font-size: 14px; color: var(--cream);
+    background: var(--board); border: 1px solid #3a4392; border-bottom-width: 3px;
+    border-radius: 6px; padding: 1px 7px; margin-right: 4px;
+  }
+  #sound-btn { font: inherit; color: var(--soft); background: none; border: none; cursor: pointer; padding: 0; }
+
+  /* ---------- Message cards (level start, oops, paused, game over) ---------- */
+  #card { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(21, 26, 63, 0.6); }
+  .card-panel {
+    background: var(--night); border: 3px solid var(--tile); border-radius: 22px;
+    box-shadow: 0 8px 0 var(--tile-edge);
+    padding: 24px 34px 22px; width: min(540px, 92%); text-align: center;
+  }
+  .card-panel h2 { margin: 0 0 10px; font-size: 38px; font-weight: 700; }
+  #card-body { font-size: 22px; line-height: 1.4; }
+  #card-body p { margin: 0 0 12px; }
+  .rule-big { font-size: 30px; font-weight: 600; color: var(--gold); }
+  .bad-tile {
+    display: inline-block; min-width: 90px; padding: 8px 18px; margin-bottom: 12px;
+    border-radius: 14px; background: var(--tile); box-shadow: 0 5px 0 var(--tile-edge), 0 0 0 4px var(--coral);
+    font-size: 32px; font-weight: 600;
+  }
+  .note { color: var(--soft); font-size: 18px; }
+  .lost { color: var(--coral); }
+  .card-actions { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+  .card-key { margin: 12px 0 0; color: var(--soft); font-size: 15px; }
+  .hidden { display: none !important; }
+
+  .btn {
+    font: inherit; font-size: 22px; font-weight: 600; cursor: pointer;
+    padding: 10px 28px; border: none; border-radius: 14px;
+    background: var(--muncher); color: #0f2e14; box-shadow: 0 5px 0 var(--muncher-dark);
+    transition: opacity .2s;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--muncher-dark); }
+  .btn.secondary { background: var(--tile); color: var(--cream); box-shadow: 0 5px 0 var(--tile-edge); }
+  .btn.locked { opacity: .45; }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+  /* ---------- Menu ---------- */
+  #menu {
+    position: fixed; inset: 0; overflow: auto; background: var(--night);
+    display: flex; flex-direction: column; align-items: center; padding: 18px 16px 24px;
+  }
+  .title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #title-canvas { width: 240px; height: 80px; }
+  h1 { margin: 0; font-size: clamp(40px, 6vw, 64px); font-weight: 700; letter-spacing: -1px; }
+  .menu-section { width: min(980px, 100%); margin-top: 14px; }
+  .menu-section h3 { margin: 0 0 8px; font-size: 20px; font-weight: 500; color: var(--soft); }
+  .group { display: grid; grid-template-columns: 190px 1fr; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .group-label { font-size: 18px; color: var(--soft); }
+  .choices { display: flex; flex-wrap: wrap; gap: 10px; }
+  .choice {
+    font: inherit; color: var(--cream); cursor: pointer; text-align: left;
+    background: var(--board); border: 3px solid transparent; border-radius: 14px;
+    padding: 8px 16px; min-width: 150px; font-size: 20px; font-weight: 600;
+  }
+  .choice small { display: block; font-size: 15px; font-weight: 400; color: var(--soft); }
+  .choice[aria-pressed="true"] { border-color: var(--gold); background: var(--tile); }
+  #speed-note { margin: 8px 0 0; color: var(--soft); font-size: 17px; min-height: 1.4em; }
+  #play-btn { margin-top: 18px; font-size: 28px; padding: 12px 56px; }
+
+  @media (max-width: 700px) {
+    .group { grid-template-columns: 1fr; }
+    #hud { grid-template-columns: 1fr 1fr; }
+    .hud-rule { grid-column: 1 / -1; grid-row: 2; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="hud-level">Level <b id="hud-level">1</b></div>
+    <div class="hud-rule"><small>Munch</small><span id="hud-rule">…</span></div>
+    <div class="hud-stats">
+      <div class="stat" id="hud-lives" title="Lives"></div>
+      <div class="stat" title="Hints left"><span class="star">★</span><b id="hud-hints">3</b></div>
+      <div class="stat">Score <b id="hud-score">0</b></div>
+    </div>
+  </header>
+
+  <main id="stage">
+    <canvas id="board" aria-label="Number Munchers game board"></canvas>
+    <div id="card" class="hidden" role="dialog" aria-live="polite">
+      <div class="card-panel">
+        <h2 id="card-title"></h2>
+        <div id="card-body"></div>
+        <div class="card-actions">
+          <button class="btn" id="card-primary"></button>
+          <button class="btn secondary" id="card-secondary"></button>
+        </div>
+        <p class="card-key">Press <kbd>Space</kbd> or <kbd>Enter</kbd></p>
+      </div>
+    </div>
+  </main>
+
+  <footer id="help">
+    <span><kbd>← ↑ ↓ →</kbd>Move</span>
+    <span><kbd>Space</kbd>Munch</span>
+    <span><kbd>H</kbd>Hint</span>
+    <span><kbd>P</kbd>Pause</span>
+    <span><button id="sound-btn"><kbd>M</kbd><span id="sound-label">Sound on</span></button></span>
+  </footer>
+</div>
+
+<div id="menu">
+  <div class="title-row">
+    <canvas id="title-canvas" width="480" height="160" aria-hidden="true"></canvas>
+    <h1>Number Munchers</h1>
+  </div>
+
+  <div class="menu-section">
+    <h3>Pick a game</h3>
+    <div id="mode-groups"></div>
+  </div>
+
+  <div class="menu-section">
+    <h3>Troggles</h3>
+    <div class="choices" id="speed-choices"></div>
+    <p id="speed-note"></p>
+  </div>
+
+  <button class="btn" id="play-btn">Play</button>
+</div>
+
+<script>
+/* =====================================================================
+   NUMBER MUNCHERS
+   ---------------------------------------------------------------------
+   TEACHER SETTINGS: change the numbers below to tune the game.
+
+   Tip: you can send students straight to a game with a link like
+     .../munchers/?mode=factors&speed=slow
+   mode:  add, sub, addsub, mul, div, evenodd, multiples, factors, primes
+   speed: practice, slow, normal, fast
+   ===================================================================== */
+const SETTINGS = {
+  HINTS_PER_LEVEL: 3,            // hints refill every level (Practice has unlimited)
+  CORRECT_ANSWERS_START: 8,      // correct answers on the board at level 1
+  CORRECT_ANSWERS_MAX: 12,       // grows by 1 every two levels up to this
+  TROGGLE_WARNING_MS: 1800,      // how long the "!" shows before a troggle walks in
+  SAFE_TIME_MS: 2500,            // troggles can't catch you right after a mistake or a catch
+  SOUND_ON_AT_START: true,       // students can toggle with M
+
+  SPEEDS: {
+    practice: {
+      label: "None", sub: "practice",
+      note: "No troggles. Wrong answers show you why, and never cost a life.",
+      troggles: false, lives: 3, wrongCostsLife: false, unlimitedHints: true
+    },
+    slow: {
+      label: "Slow", sub: "1 or 2 at a time",
+      note: "Slow troggles. Wrong answers show you why, but don't cost a life.",
+      troggles: true, lives: 5, wrongCostsLife: false,
+      stepMs: 2000,                // time between troggle steps (bigger = slower)
+      firstTroggleMs: 9000,        // wait before the first troggle each level
+      gapMs: [9000, 14000],        // wait between troggles (random in this range)
+      maxTroggles: [1, 1, 1, 1, 2],// max on the board at level 1, 2, 3... (last repeats)
+      hunterFromLevel: 5,          // purple hunters (they follow you) start at this level
+      troggleSteps: 14             // steps a troggle takes before it wanders off the board
+    },
+    normal: {
+      label: "Normal", sub: "1 to 3 at a time",
+      note: "Wrong answers cost a life. Purple hunters show up at level 3.",
+      troggles: true, lives: 4, wrongCostsLife: true,
+      stepMs: 1400, firstTroggleMs: 6000, gapMs: [6000, 10000],
+      maxTroggles: [1, 1, 2, 2, 3], hunterFromLevel: 3, troggleSteps: 16
+    },
+    fast: {
+      label: "Fast", sub: "2 to 4 at a time",
+      note: "For arcade experts. Wrong answers cost a life.",
+      troggles: true, lives: 3, wrongCostsLife: true,
+      stepMs: 950, firstTroggleMs: 4000, gapMs: [4000, 7000],
+      maxTroggles: [2, 2, 3, 3, 4], hunterFromLevel: 2, troggleSteps: 18
+    }
+  }
+};
+
+/* ============================ HELPERS ============================ */
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const tier = (level, arr) => arr[Math.min(level, arr.length) - 1];   // level 1 = first entry
+const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = rnd(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+const isPrime = n => { if (n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
+
+/* ============================ GAME MODES ============================
+   Each mode's setup(level) returns a rule:
+   hud, title, correct() and wrong() item makers, explain(item) for wrong
+   answers, and an optional fact(item) shown when a correct one is munched. */
+
+function equalsRule(T, correct, wrong) {
+  return {
+    hud: `Equals ${T}`,
+    title: `Munch everything that equals ${T}`,
+    correct, wrong,
+    explain: it => `${it.label} = ${it.val}, not ${T}.`
+  };
+}
+const addItem = r => { const a = rnd(1, r - 1); return { label: `${a} + ${r - a}`, val: r }; };
+const subItem = (r, max) => { const a = rnd(r + 1, max); return { label: `${a} − ${a - r}`, val: r }; };
+
+const MODES = {
+  add: {
+    name: "Addition", sample: "3 + 4",
+    setup(L) {
+      const [lo, hi] = tier(L, [[5, 10], [6, 10], [11, 15], [12, 18], [20, 40], [30, 60], [40, 99]]);
+      const T = rnd(lo, hi);
+      const offs = T >= 20 ? [-10, -2, -1, 1, 2, 10] : [-2, -1, 1, 2];
+      return equalsRule(T, () => addItem(T), () => {
+        let r; do { r = T + pick(offs); } while (r < 2);
+        return addItem(r);
+      });
+    }
+  },
+  sub: {
+    name: "Subtraction", sample: "9 − 5",
+    setup(L) {
+      const { T: [lo, hi], max } = tier(L, [
+        { T: [1, 5], max: 10 }, { T: [2, 7], max: 10 }, { T: [3, 10], max: 20 }, { T: [4, 12], max: 20 },
+        { T: [10, 30], max: 50 }, { T: [15, 50], max: 99 }, { T: [20, 70], max: 99 }]);
+      const T = rnd(lo, hi);
+      const offs = max > 20 ? [-10, -2, -1, 1, 2, 10] : [-2, -1, 1, 2];
+      return equalsRule(T, () => subItem(T, max), () => {
+        let r; do { r = T + pick(offs); } while (r < 0 || r >= max);
+        return subItem(r, max);
+      });
+    }
+  },
+  addsub: {
+    name: "Add & subtract", sample: "6 + 2 or 11 − 3",
+    setup(L) {
+      const { T: [lo, hi], max } = tier(L, [
+        { T: [4, 9], max: 10 }, { T: [5, 10], max: 12 }, { T: [8, 15], max: 20 }, { T: [10, 18], max: 20 },
+        { T: [15, 40], max: 60 }, { T: [25, 70], max: 99 }]);
+      const T = rnd(lo, hi);
+      const make = r => (r >= 2 && (Math.random() < 0.5 || r >= max - 1)) ? addItem(r) : subItem(r, max);
+      const offs = max > 20 ? [-10, -2, -1, 1, 2, 10] : [-2, -1, 1, 2];
+      return equalsRule(T, () => make(T), () => {
+        let r; do { r = T + pick(offs); } while (r < 2 || r >= max);
+        return make(r);
+      });
+    }
+  },
+  mul: {
+    name: "Multiplication", sample: "4 × 6",
+    setup(L) {
+      const T = pick(tier(L, [[6, 8, 10, 12], [12, 16, 18, 20], [18, 20, 24, 30], [24, 30, 36, 40], [36, 40, 42, 48, 56], [24, 36, 40, 48, 60, 72]]));
+      const pairs = [];
+      for (let a = 2; a <= 12; a++) if (T % a === 0 && T / a >= 2 && T / a <= 12) pairs.push([a, T / a]);
+      return equalsRule(T,
+        () => { const [a, b] = pick(pairs); return { label: `${a} × ${b}`, val: T }; },
+        () => {
+          for (;;) {   // nudge one factor by 1: 4 × 7 instead of 4 × 6
+            let [a, b] = pick(pairs);
+            if (Math.random() < 0.5) a += pick([-1, 1]); else b += pick([-1, 1]);
+            if (a >= 2 && b >= 2 && a <= 12 && b <= 12 && a * b !== T) return { label: `${a} × ${b}`, val: a * b };
+          }
+        });
+    }
+  },
+  div: {
+    name: "Division", sample: "24 ÷ 4",
+    setup(L) {
+      const { q: [lo, hi], d } = tier(L, [{ q: [2, 5], d: 5 }, { q: [2, 6], d: 6 }, { q: [3, 9], d: 9 }, { q: [4, 10], d: 10 }, { q: [4, 12], d: 12 }]);
+      const T = rnd(lo, hi);
+      const make = r => { const dv = rnd(2, d); return { label: `${r * dv} ÷ ${dv}`, val: r }; };
+      return equalsRule(T, () => make(T), () => {
+        let r; do { r = T + pick([-2, -1, 1, 2]); } while (r < 1);
+        return make(r);
+      });
+    }
+  },
+  evenodd: {
+    name: "Even & odd", sample: "2, 4, 6…",
+    setup(L) {
+      const even = L % 2 === 1;                 // odd-numbered levels: even numbers
+      const max = tier(L, [20, 20, 100, 100, 999]);
+      const num = wantEven => { let n; do { n = rnd(1, max); } while ((n % 2 === 0) !== wantEven); return { label: String(n), val: n }; };
+      return {
+        hud: even ? "Even numbers" : "Odd numbers",
+        title: `Munch the ${even ? "even" : "odd"} numbers`,
+        correct: () => num(even), wrong: () => num(!even),
+        explain: it => {
+          const n = it.val, word = n % 2 === 0 ? "even" : "odd";
+          return (n < 10 ? `${n} is ${word}.` : `${n} ends in ${n % 10}, so it's ${word}.`) + " Even numbers end in 0, 2, 4, 6 or 8.";
+        }
+      };
+    }
+  },
+  multiples: {
+    name: "Multiples", sample: "5, 10, 15…",
+    setup(L) {
+      const n = pick(tier(L, [[2, 5, 10], [2, 5, 10], [3, 4], [3, 4, 6], [6, 7, 8, 9], [3, 4, 6, 7, 8, 9, 11, 12]]));
+      const kMax = L <= 4 ? 10 : 12;
+      return {
+        hud: `Multiples of ${n}`,
+        title: `Munch the multiples of ${n}`,
+        correct: () => { const k = rnd(1, kMax); return { label: String(n * k), val: n * k, k }; },
+        wrong: () => { const v = n * rnd(0, kMax - 1) + rnd(1, n - 1); return { label: String(v), val: v }; },
+        explain: it => {
+          const v = it.val, k = Math.floor(v / n);
+          if (k === 0) return `${v} is less than ${n}. The smallest multiple of ${n} is ${n}.`;
+          return `${n} × ${k} = ${n * k} and ${n} × ${k + 1} = ${n * (k + 1)}. ${v} is in between, so it isn't a multiple of ${n}.`;
+        },
+        fact: it => `${n} × ${it.k}`
+      };
+    }
+  },
+  factors: {
+    name: "Factors", sample: "1, 2, 3, 4, 6, 12",
+    setup(L) {
+      const N = pick(tier(L, [[6, 8, 10, 12], [12, 15, 16, 18, 20], [18, 20, 24, 28, 30], [24, 30, 32, 36, 40], [36, 42, 45, 48, 56, 60], [48, 60, 64, 72, 80, 84, 90, 96, 100]]));
+      const fs = [], ws = [];
+      for (let i = 1; i <= N; i++) if (N % i === 0) fs.push(i);
+      const wMax = Math.max(10, Math.ceil(N / 2) + 3);
+      for (let i = 2; i <= wMax; i++) if (N % i !== 0) ws.push(i);
+      return {
+        hud: `Factors of ${N}`,
+        title: `Munch the factors of ${N}`,
+        correct: () => { const v = pick(fs); return { label: String(v), val: v }; },
+        wrong: () => { const v = pick(ws); return { label: String(v), val: v }; },
+        explain: it => {
+          const v = it.val;
+          if (v > N) return `${v} is bigger than ${N}, so it can't be a factor of ${N}.`;
+          return `${N} ÷ ${v} = ${Math.floor(N / v)} R ${N % v}. It doesn't divide evenly, so ${v} isn't a factor of ${N}.`;
+        },
+        fact: it => `${it.val} × ${N / it.val} = ${N}`
+      };
+    }
+  },
+  primes: {
+    name: "Primes", sample: "2, 3, 5, 7…",
+    setup(L) {
+      const max = tier(L, [20, 30, 50, 100]);
+      const primes = [], comps = [], oddComps = [];
+      for (let i = 2; i <= max; i++) {
+        if (isPrime(i)) primes.push(i);
+        else { comps.push(i); if (i % 2) oddComps.push(i); }
+      }
+      return {
+        hud: "Prime numbers",
+        title: "Munch the prime numbers",
+        correct: () => { const v = pick(primes); return { label: String(v), val: v }; },
+        wrong: () => {
+          const v = Math.random() < 0.12 ? 1 : (Math.random() < 0.65 && oddComps.length ? pick(oddComps) : pick(comps));
+          return { label: String(v), val: v };
+        },
+        explain: it => {
+          const v = it.val;
+          if (v === 1) return "1 isn't prime. A prime number has exactly two factors: 1 and itself.";
+          let p = 2; while (v % p) p++;
+          return `${v} = ${p} × ${v / p}, so it has more than two factors. It isn't prime.`;
+        },
+        fact: it => `only 1 × ${it.val}`
+      };
+    }
+  }
+};
+
+const MODE_GROUPS = [
+  { label: "Adding and subtracting", keys: ["add", "sub", "addsub"] },
+  { label: "Multiplying and dividing", keys: ["mul", "div"] },
+  { label: "Number patterns", keys: ["evenodd", "multiples", "factors", "primes"] }
+];
+
+/* ============================ BOARD & DRAWING CONSTANTS ============================ */
+const COLS = 6, ROWS = 5, CW = 150, CH = 110, M = 40;   // cell size and margin, in board units
+const LW = COLS * CW + 2 * M, LH = ROWS * CH + 2 * M;
+const COL = {
+  board: "#212863", tile: "#353e93", tileEdge: "#232a6b", tileEaten: "#1b2156",
+  cream: "#fff4d6", muncher: "#7ee36b", muncherDark: "#2f7d2d",
+  coral: "#ff6b6b", coralDark: "#c94848", violet: "#b48cff", violetDark: "#7a55c9", gold: "#ffd23f"
+};
+const FONT = 'Fredoka, "Trebuchet MS", system-ui, sans-serif';
+const cxOf = c => M + c * CW + CW / 2;
+const cyOf = r => M + r * CH + CH / 2;
+const onBoard = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS;
+const dist = (a, b) => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+const DIRS = [{ dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 }];
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+let viewScale = 1;
+
+/* ============================ SOUND ============================ */
+const Sound = {
+  on: SETTINGS.SOUND_ON_AT_START, ac: null,
+  ensure() {
+    if (!this.ac) { try { this.ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; } }
+    if (this.ac.state === "suspended") this.ac.resume();
+  },
+  tone(f, dur, { type = "square", vol = 0.05, to = null, delay = 0 } = {}) {
+    if (!this.on || !this.ac) return;
+    const t0 = this.ac.currentTime + delay, o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(this.ac.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+  },
+  munch() { this.tone(500, 0.09, { to: 900 }); },
+  wrong() { this.tone(220, 0.3, { type: "sawtooth", to: 110, vol: 0.035 }); },
+  caught() { this.tone(650, 0.7, { type: "triangle", to: 80, vol: 0.08 }); },
+  warn() { this.tone(950, 0.05, { type: "sine", vol: 0.05 }); this.tone(950, 0.05, { type: "sine", vol: 0.05, delay: 0.13 }); },
+  clear() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.15, { delay: i * 0.1, vol: 0.045 })); }
+};
+
+/* ============================ GAME STATE ============================ */
+const G = {
+  state: "menu",              // menu | card | playing | caught | cleared
+  modeKey: "multiples", speedKey: "normal", speed: null, rule: null,
+  level: 1, score: 0, lives: 0, hints: 0,
+  t: 0,                       // game clock in ms; only runs while playing
+  cells: [], troggles: [], warnings: [], particles: [], floats: [],
+  player: { col: 2, row: 2, fromX: 0, fromY: 0, moveStart: -1e9, dir: 1, mouthUntil: 0, mood: "happy", safeUntil: 0 },
+  nextSpawnAt: 0, caughtAt: 0, clearedAt: 0,
+  hintCell: null, hintUntil: 0, lastMove: 0, wrongCell: null
+};
+
+/* ---------- Board ---------- */
+function buildBoard() {
+  const nCorrect = Math.min(SETTINGS.CORRECT_ANSWERS_START + Math.floor((G.level - 1) / 2), SETTINGS.CORRECT_ANSWERS_MAX);
+  const items = [], seen = new Set();
+  const add = (gen, ok) => {
+    for (let tries = 0; tries < 40; tries++) {
+      const it = gen();
+      if (!seen.has(it.label) || tries >= 30) { seen.add(it.label); it.ok = ok; items.push(it); return; }
+    }
+  };
+  for (let i = 0; i < nCorrect; i++) add(G.rule.correct, true);
+  while (items.length < COLS * ROWS) add(G.rule.wrong, false);
+  shuffle(items);
+  G.cells = items.map((it, i) => ({ ...it, col: i % COLS, row: Math.floor(i / COLS), eaten: false, fontSize: 0 }));
+}
+const cellAt = (c, r) => G.cells[r * COLS + c];
+
+/* ---------- Flow ---------- */
+function startGame() {
+  G.speed = SETTINGS.SPEEDS[G.speedKey];
+  G.level = 1; G.score = 0; G.lives = G.speed.lives;
+  document.getElementById("menu").classList.add("hidden");
+  blurFocus();
+  setupLevel();
+}
+
+function setupLevel() {
+  G.rule = MODES[G.modeKey].setup(G.level);
+  buildBoard();
+  G.troggles = []; G.warnings = []; G.floats = [];
+  G.hints = G.speed.unlimitedHints ? Infinity : SETTINGS.HINTS_PER_LEVEL;
+  G.hintCell = null;
+  const p = G.player;
+  p.col = 2; p.row = 2; p.fromX = cxOf(2); p.fromY = cyOf(2); p.moveStart = -1e9; p.mood = "happy";
+  if (G.speed.troggles) G.nextSpawnAt = G.t + G.speed.firstTroggleMs;
+  updateHUD();
+  const howTo = G.level === 1 ? `<p class="note">Arrow keys move. Space munches. H shows a hint.</p>` : "";
+  Card.show({
+    title: `Level ${G.level}`,
+    body: `<p class="rule-big">${G.rule.title}</p>${howTo}`,
+    primary: "Start", onPrimary: resume, lock: G.level === 1 ? 0 : 700
+  });
+}
+
+function resume() {
+  G.state = "playing";
+  G.player.mood = "happy";
+  if (G.wrongCell) { G.wrongCell = null; }
+  blurFocus();
+}
+
+function pauseGame() {
+  Card.show({
+    title: "Paused", body: "",
+    primary: "Keep going", onPrimary: resume,
+    secondary: "Choose a game", onSecondary: showMenu, lock: 0
+  });
+}
+
+function gameOver() {
+  updateHUD();
+  Card.show({
+    title: "Game over",
+    body: `<p>Score: <b>${G.score}</b></p><p class="note">You made it to level ${G.level}.</p>`,
+    primary: "Play again", onPrimary: startGame,
+    secondary: "Choose a game", onSecondary: showMenu, lock: 900
+  });
+}
+
+function showMenu() {
+  Card.hide();
+  G.state = "menu";
+  G.troggles = []; G.warnings = [];
+  document.getElementById("menu").classList.remove("hidden");
+  renderMenu();
+}
+
+/* ---------- Player actions ---------- */
+function movePlayer(dx, dy, now) {
+  const p = G.player, nc = p.col + dx, nr = p.row + dy;
+  if (!onBoard(nc, nr)) return;
+  if (now - G.lastMove < 90) return;          // stops held keys from zooming across the board
+  G.lastMove = now;
+  const pos = playerPos(now);
+  p.fromX = pos.x; p.fromY = pos.y; p.moveStart = now;
+  p.col = nc; p.row = nr;
+  if (dx) p.dir = dx;
+  checkCaught(now);
+}
+
+function munch(now) {
+  const p = G.player, cell = cellAt(p.col, p.row);
+  p.mouthUntil = now + 180;
+  if (cell.eaten) return;
+  if (cell.ok) {
+    cell.eaten = true;
+    G.score += 10;
+    Sound.munch();
+    burst(cxOf(p.col), cyOf(p.row), COL.muncher, 14, now);
+    G.floats.push({ text: G.rule.fact ? G.rule.fact(cell) : "+10", x: cxOf(p.col), y: cyOf(p.row) - 40, born: now });
+    if (G.hintCell === cell) G.hintCell = null;
+    updateHUD();
+    if (!G.cells.some(c => c.ok && !c.eaten)) levelCleared(now);
+  } else {
+    Sound.wrong();
+    p.mood = "sad";
+    G.wrongCell = cell;
+    const costs = G.speed.wrongCostsLife;
+    if (costs) G.lives--;
+    updateHUD();
+    const after = costs
+      ? `<p class="lost">That cost a life. ${livesText()}</p>`
+      : `<p class="note">No life lost. Try another one!</p>`;
+    Card.show({
+      title: "Not quite",
+      body: `<div class="bad-tile">${cell.label}</div><p>${G.rule.explain(cell)}</p>${after}`,
+      primary: G.lives <= 0 ? "OK" : "Keep going",
+      onPrimary: () => {
+        if (G.lives <= 0) return gameOver();
+        G.player.safeUntil = G.t + SETTINGS.SAFE_TIME_MS;
+        resume();
+      },
+      lock: 900
+    });
+  }
+}
+
+function useHint(now) {
+  if (G.hints <= 0) return;
+  const p = G.player;
+  const targets = G.cells.filter(c => c.ok && !c.eaten);
+  if (!targets.length) return;
+  targets.sort((a, b) => dist(a, p) - dist(b, p));
+  G.hintCell = targets[0];
+  G.hintUntil = now + 3000;
+  G.hints--;
+  updateHUD();
+}
+
+function levelCleared(now) {
+  G.state = "cleared";
+  G.clearedAt = now;
+  const bonus = 25 * G.level;
+  G.score += bonus;
+  Sound.clear();
+  for (const tr of G.troggles) burst(trogglePos(tr, now).x, trogglePos(tr, now).y, "#ffffff", 10, now);
+  G.troggles = []; G.warnings = [];
+  G.floats.push({ text: `Level clear! +${bonus}`, x: LW / 2, y: LH / 2, born: now, big: true });
+  updateHUD();
+}
+
+function livesText() { return `${G.lives} ${G.lives === 1 ? "life" : "lives"} left.`; }
+
+/* ---------- Troggles ---------- */
+function edgeEntries() {
+  const e = [];
+  for (let c = 0; c < COLS; c++) { e.push({ col: c, row: 0, dx: 0, dy: 1 }); e.push({ col: c, row: ROWS - 1, dx: 0, dy: -1 }); }
+  for (let r = 0; r < ROWS; r++) { e.push({ col: 0, row: r, dx: 1, dy: 0 }); e.push({ col: COLS - 1, row: r, dx: -1, dy: 0 }); }
+  return e;
+}
+
+function startWarning(now) {
+  const p = G.player;
+  let cands = edgeEntries().filter(e => dist(e, p) >= 3 && !G.troggles.some(t => dist(t, e) < 2) && !G.warnings.some(w => dist(w, e) < 2));
+  if (!cands.length) cands = edgeEntries().filter(e => dist(e, p) >= 2);
+  if (!cands.length) return false;
+  const e = pick(cands);
+  const type = G.level >= G.speed.hunterFromLevel && Math.random() < 0.45 ? "hunter" : "wanderer";
+  G.warnings.push({ ...e, type, until: G.t + SETTINGS.TROGGLE_WARNING_MS, born: now });
+  Sound.warn();
+  return true;
+}
+
+function releaseTroggle(w, now) {
+  const col = w.col - w.dx, row = w.row - w.dy;   // starts just off the board
+  G.troggles.push({
+    type: w.type, col, row, dx: w.dx, dy: w.dy,
+    fromX: cxOf(col), fromY: cyOf(row), moveStart: now,
+    steps: 0, life: G.speed.troggleSteps + rnd(-3, 3), leaving: false, goneAt: 0,
+    stepMs: G.speed.stepMs * (w.type === "hunter" ? 1.15 : 1),
+    nextStepAt: G.t
+  });
+}
+
+function chooseDir(tr) {
+  const opts = DIRS.filter(d => onBoard(tr.col + d.dx, tr.row + d.dy) && !(d.dx === -tr.dx && d.dy === -tr.dy));
+  if (!opts.length) return { dx: -tr.dx, dy: -tr.dy };
+  if (tr.type === "hunter" && Math.random() < 0.7) {
+    const p = G.player;
+    let best = Infinity, bestOpts = [];
+    for (const d of opts) {
+      const dd = Math.abs(tr.col + d.dx - p.col) + Math.abs(tr.row + d.dy - p.row);
+      if (dd < best) { best = dd; bestOpts = [d]; } else if (dd === best) bestOpts.push(d);
+    }
+    return pick(bestOpts);
+  }
+  const straight = opts.find(d => d.dx === tr.dx && d.dy === tr.dy);
+  if (straight && Math.random() < 0.75) return straight;
+  return pick(opts);
+}
+
+function exitDir(tr) {
+  const ways = [
+    { d: { dx: -1, dy: 0 }, n: tr.col + 1 }, { d: { dx: 1, dy: 0 }, n: COLS - tr.col },
+    { d: { dx: 0, dy: -1 }, n: tr.row + 1 }, { d: { dx: 0, dy: 1 }, n: ROWS - tr.row }];
+  ways.sort((a, b) => a.n - b.n);
+  return ways[0].d;
+}
+
+function stepTroggle(tr, now) {
+  let d;
+  if (!onBoard(tr.col, tr.row) && tr.steps === 0) d = { dx: tr.dx, dy: tr.dy };   // walking in
+  else if (tr.leaving) d = { dx: tr.dx, dy: tr.dy };                                // walking out
+  else {
+    tr.steps++;
+    if (tr.steps >= tr.life) { tr.leaving = true; d = exitDir(tr); }
+    else d = chooseDir(tr);
+  }
+  const pos = trogglePos(tr, now);
+  tr.fromX = pos.x; tr.fromY = pos.y; tr.moveStart = now;
+  tr.col += d.dx; tr.row += d.dy; tr.dx = d.dx; tr.dy = d.dy;
+  if (tr.leaving && !onBoard(tr.col, tr.row)) tr.goneAt = now + 300;
+}
+
+function checkCaught(now) {
+  if (G.state !== "playing" || G.t < G.player.safeUntil) return;
+  const p = G.player;
+  if (G.troggles.some(tr => !tr.goneAt && tr.col === p.col && tr.row === p.row)) {
+    G.state = "caught";
+    G.caughtAt = now;
+    Sound.caught();
+    burst(cxOf(p.col), cyOf(p.row), COL.coral, 20, now);
+  }
+}
+
+function afterCaught(now) {
+  G.lives--;
+  updateHUD();
+  for (const tr of G.troggles) { const q = trogglePos(tr, now); burst(q.x, q.y, "#ffffff", 10, now); }
+  G.troggles = []; G.warnings = [];
+  if (G.lives <= 0) { G.state = "card"; return gameOver(); }
+  G.nextSpawnAt = G.t + G.speed.firstTroggleMs * 0.6;
+  Card.show({
+    title: "A troggle got you!",
+    body: `<p>${livesText()}</p><p class="note">The board is clear of troggles for now.</p>`,
+    primary: "Keep going",
+    onPrimary: () => { G.player.safeUntil = G.t + SETTINGS.SAFE_TIME_MS; resume(); },
+    lock: 800
+  });
+}
+
+function updateGame(now) {
+  if (!G.speed.troggles) return;
+  const max = tier(G.level, G.speed.maxTroggles);
+  if (G.t >= G.nextSpawnAt) {
+    const active = G.troggles.length + G.warnings.length;
+    if (active < max && startWarning(now)) G.nextSpawnAt = G.t + rnd(G.speed.gapMs[0], G.speed.gapMs[1]);
+    else G.nextSpawnAt = G.t + 1000;
+  }
+  for (let i = G.warnings.length - 1; i >= 0; i--) {
+    const w = G.warnings[i];
+    if (G.t < w.until) continue;
+    if (dist(w, G.player) === 0) { w.until = G.t + 700; continue; }   // never step right onto the muncher
+    G.warnings.splice(i, 1);
+    releaseTroggle(w, now);
+  }
+  for (const tr of G.troggles) {
+    if (tr.goneAt) continue;
+    if (G.t >= tr.nextStepAt) { stepTroggle(tr, now); tr.nextStepAt += tr.stepMs; }
+  }
+  G.troggles = G.troggles.filter(tr => !tr.goneAt || now < tr.goneAt);
+  checkCaught(now);
+}
+
+/* ---------- Effects ---------- */
+function burst(x, y, color, n, now) {
+  if (reduceMotion) n = Math.ceil(n / 3);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = 2 + Math.random() * 5;
+    G.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, born: now, color });
+  }
+}
+
+/* ============================ HUD ============================ */
+function updateHUD() {
+  document.getElementById("hud-level").textContent = G.level;
+  document.getElementById("hud-rule").textContent = G.rule ? G.rule.hud : "";
+  document.getElementById("hud-score").textContent = G.score;
+  document.getElementById("hud-hints").textContent = G.hints === Infinity ? "∞" : G.hints;
+  const lives = document.getElementById("hud-lives");
+  const showLives = G.speed && (G.speed.troggles || G.speed.wrongCostsLife);
+  lives.classList.toggle("hidden", !showLives);
+  lives.innerHTML = "";
+  for (let i = 0; i < Math.max(0, G.lives); i++) { const d = document.createElement("span"); d.className = "life"; lives.appendChild(d); }
+}
+
+/* ============================ CARDS ============================ */
+const Card = {
+  el: document.getElementById("card"),
+  used: false, lockUntil: 0, onPrimary: null, onSecondary: null,
+  show({ title, body, primary, onPrimary, secondary = null, onSecondary = null, lock = 600 }) {
+    G.state = "card";
+    this.used = false;
+    this.onPrimary = onPrimary; this.onSecondary = onSecondary;
+    this.lockUntil = performance.now() + lock;
+    document.getElementById("card-title").textContent = title;
+    document.getElementById("card-body").innerHTML = body;
+    const pb = document.getElementById("card-primary"), sb = document.getElementById("card-secondary");
+    pb.textContent = primary;
+    sb.textContent = secondary || "";
+    sb.classList.toggle("hidden", !secondary);
+    pb.classList.toggle("locked", lock > 0);
+    if (lock > 0) setTimeout(() => pb.classList.remove("locked"), lock);
+    this.el.classList.remove("hidden");
+  },
+  hide() { this.el.classList.add("hidden"); },
+  primary() {
+    if (this.used || performance.now() < this.lockUntil) return;
+    this.used = true; this.hide(); this.onPrimary && this.onPrimary();
+  },
+  secondary() {
+    if (this.used) return;
+    this.used = true; this.hide(); this.onSecondary && this.onSecondary();
+  }
+};
+document.getElementById("card-primary").addEventListener("click", () => Card.primary());
+document.getElementById("card-secondary").addEventListener("click", () => Card.secondary());
+
+function blurFocus() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
+
+/* ============================ INPUT ============================ */
+window.addEventListener("keydown", e => {
+  Sound.ensure();
+  const k = e.key, now = performance.now();
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(k)) e.preventDefault();
+  if (k === "m" || k === "M") { toggleSound(); return; }
+
+  if (G.state === "menu") {
+    if (k === "Enter") { e.preventDefault(); startGame(); }
+    return;
+  }
+  if (G.state === "card") {
+    if (k === " " || k === "Enter") { e.preventDefault(); Card.primary(); }
+    return;
+  }
+  if (G.state !== "playing") return;
+
+  switch (k) {
+    case "ArrowUp": case "w": case "W": movePlayer(0, -1, now); break;
+    case "ArrowDown": case "s": case "S": movePlayer(0, 1, now); break;
+    case "ArrowLeft": case "a": case "A": movePlayer(-1, 0, now); break;
+    case "ArrowRight": case "d": case "D": movePlayer(1, 0, now); break;
+    case " ": case "Enter": if (!e.repeat) munch(now); break;
+    case "h": case "H": useHint(now); break;
+    case "p": case "P": case "Escape": pauseGame(); break;
+  }
+});
+
+// Touch or click: tap your own square to munch, tap elsewhere to step toward it.
+canvas.addEventListener("pointerdown", e => {
+  Sound.ensure();
+  if (G.state !== "playing") return;
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / viewScale, y = (e.clientY - r.top) / viewScale;
+  const c = Math.floor((x - M) / CW), row = Math.floor((y - M) / CH);
+  const p = G.player, now = performance.now();
+  if (c === p.col && row === p.row) return munch(now);
+  const dx = c - p.col, dy = row - p.row;
+  if (Math.abs(dx) >= Math.abs(dy)) movePlayer(Math.sign(dx), 0, now); else movePlayer(0, Math.sign(dy), now);
+});
+
+document.addEventListener("visibilitychange", () => { if (document.hidden && G.state === "playing") pauseGame(); });
+
+function toggleSound() {
+  Sound.on = !Sound.on;
+  document.getElementById("sound-label").textContent = Sound.on ? "Sound on" : "Sound off";
+}
+document.getElementById("sound-btn").addEventListener("click", () => { Sound.ensure(); toggleSound(); blurFocus(); });
+document.getElementById("sound-label").textContent = Sound.on ? "Sound on" : "Sound off";
+
+/* ============================ DRAWING ============================ */
+function ease(t) { return 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3); }
+
+function playerPos(now) {
+  const p = G.player, k = ease((now - p.moveStart) / 110);
+  return { x: p.fromX + (cxOf(p.col) - p.fromX) * k, y: p.fromY + (cyOf(p.row) - p.fromY) * k };
+}
+function trogglePos(tr, now) {
+  const k = ease((now - tr.moveStart) / 220);
+  return { x: tr.fromX + (cxOf(tr.col) - tr.fromX) * k, y: tr.fromY + (cyOf(tr.row) - tr.fromY) * k };
+}
+
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+function drawMuncher(c, x, y, { r = 34, dir = 1, open = false, mood = "happy", angle = 0, scale = 1, alpha = 1 } = {}) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.translate(x, y); c.rotate(angle); c.scale(scale * dir, scale);
+  c.fillStyle = COL.muncherDark;
+  c.beginPath(); c.ellipse(-r * 0.42, r * 0.9, r * 0.3, r * 0.16, 0, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(r * 0.42, r * 0.9, r * 0.3, r * 0.16, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = COL.muncher; c.strokeStyle = COL.muncherDark; c.lineWidth = r * 0.1;
+  c.beginPath();
+  if (open) { c.moveTo(0, r * 0.05); c.arc(0, 0, r, 0.6, Math.PI * 2 - 0.6); c.closePath(); }
+  else c.arc(0, 0, r, 0, Math.PI * 2);
+  c.fill(); c.stroke();
+  c.fillStyle = "#fff"; c.beginPath(); c.arc(r * 0.12, -r * 0.42, r * 0.27, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#14203a"; c.beginPath(); c.arc(r * 0.22, -r * 0.42, r * 0.13, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = COL.muncherDark; c.lineWidth = r * 0.09; c.lineCap = "round";
+  if (mood === "sad") {
+    c.beginPath(); c.moveTo(-r * 0.15, -r * 0.82); c.lineTo(r * 0.38, -r * 0.7); c.stroke();
+    c.beginPath(); c.arc(r * 0.45, r * 0.5, r * 0.25, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+  } else if (!open) {
+    c.beginPath(); c.arc(r * 0.3, r * 0.02, r * 0.42, Math.PI * 0.12, Math.PI * 0.5); c.stroke();
+  }
+  c.restore();
+}
+
+function drawTroggle(c, x, y, { type, dx, dy, now, alpha = 1 }) {
+  const r = 32, hunter = type === "hunter";
+  const fill = hunter ? COL.violet : COL.coral, dark = hunter ? COL.violetDark : COL.coralDark;
+  c.save();
+  c.globalAlpha = alpha;
+  c.translate(x, y + Math.sin(now / 160) * 2);
+  c.lineWidth = 3; c.strokeStyle = dark; c.lineJoin = "round";
+  if (hunter) {
+    c.fillStyle = dark;
+    for (const s of [-1, 1]) {
+      c.beginPath(); c.moveTo(s * r * 0.35, -r * 0.95); c.lineTo(s * r * 0.75, -r * 1.35); c.lineTo(s * r * 0.75, -r * 0.6); c.closePath(); c.fill();
+    }
+  }
+  c.fillStyle = fill;
+  c.beginPath();
+  c.moveTo(-r, r * 0.85); c.lineTo(-r, -r * 0.1);
+  c.arc(0, -r * 0.1, r, Math.PI, 0);
+  c.lineTo(r, r * 0.85);
+  const phase = Math.floor(now / 180) % 2;
+  for (let i = 1; i <= 4; i++) c.lineTo(r - i * (r / 2), r * 0.85 - ((i + phase) % 2 ? r * 0.2 : 0));
+  c.closePath(); c.fill(); c.stroke();
+  for (const s of [-1, 1]) {
+    c.fillStyle = "#fff"; c.beginPath(); c.arc(s * r * 0.36, -r * 0.15, r * 0.26, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#1a1a3a"; c.beginPath(); c.arc(s * r * 0.36 + dx * r * 0.11, -r * 0.15 + dy * r * 0.11, r * 0.12, 0, Math.PI * 2); c.fill();
+  }
+  if (hunter) {
+    c.strokeStyle = "#2a1650"; c.lineWidth = 3.5; c.lineCap = "round";
+    for (const s of [-1, 1]) { c.beginPath(); c.moveTo(s * r * 0.6, -r * 0.55); c.lineTo(s * r * 0.15, -r * 0.38); c.stroke(); }
+  }
+  c.restore();
+}
+
+function labelFont(cell) {
+  if (!cell.fontSize) {
+    let size = cell.label.length <= 3 ? 46 : 40;
+    ctx.font = `600 ${size}px ${FONT}`;
+    while (size > 22 && ctx.measureText(cell.label).width > CW - 28) { size -= 2; ctx.font = `600 ${size}px ${FONT}`; }
+    cell.fontSize = size;
+  }
+  return `600 ${cell.fontSize}px ${FONT}`;
+}
+
+function draw(now) {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(viewScale * dpr, 0, 0, viewScale * dpr, 0, 0);
+  ctx.clearRect(0, 0, LW, LH);
+  if (G.state === "menu") return;
+
+  ctx.fillStyle = COL.board;
+  rr(ctx, M - 14, M - 14, COLS * CW + 28, ROWS * CH + 28, 24); ctx.fill();
+
+  // Tiles
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const pulse = 0.5 + 0.5 * Math.sin(now / 160);
+  for (const cell of G.cells) {
+    const x = M + cell.col * CW + 6, y = M + cell.row * CH + 6, w = CW - 12, h = CH - 14;
+    if (cell.eaten) {
+      ctx.fillStyle = COL.tileEaten; rr(ctx, x, y + 4, w, h, 14); ctx.fill();
+      continue;
+    }
+    ctx.fillStyle = COL.tileEdge; rr(ctx, x, y + 6, w, h, 14); ctx.fill();
+    ctx.fillStyle = COL.tile; rr(ctx, x, y, w, h, 14); ctx.fill();
+    if (G.hintCell === cell && now < G.hintUntil) {
+      ctx.strokeStyle = COL.gold; ctx.lineWidth = 4 + 3 * pulse; rr(ctx, x, y, w, h, 14); ctx.stroke();
+    }
+    if (G.wrongCell === cell) {
+      ctx.strokeStyle = COL.coral; ctx.lineWidth = 5; rr(ctx, x, y, w, h, 14); ctx.stroke();
+    }
+    if (cell.col === G.player.col && cell.row === G.player.row && G.state !== "caught") continue;   // drawn with the muncher
+    ctx.fillStyle = COL.cream;
+    ctx.font = labelFont(cell);
+    ctx.fillText(cell.label, x + w / 2, y + h / 2 + 2);
+  }
+
+  // Troggle warnings: flashing cell outline and a "!" badge where it will walk in
+  for (const w of G.warnings) {
+    const on = Math.floor((now - w.born) / 200) % 2 === 0;
+    const x = M + w.col * CW + 6, y = M + w.row * CH + 6;
+    ctx.strokeStyle = w.type === "hunter" ? COL.violet : COL.coral;
+    ctx.globalAlpha = on ? 1 : 0.35; ctx.lineWidth = 4; ctx.setLineDash([10, 8]);
+    rr(ctx, x, y, CW - 12, CH - 14, 14); ctx.stroke();
+    ctx.setLineDash([]);
+    const bx = cxOf(w.col) - w.dx * (CW / 2 + 18), by = cyOf(w.row) - w.dy * (CH / 2 + 18);
+    ctx.fillStyle = w.type === "hunter" ? COL.violet : COL.coral;
+    ctx.beginPath(); ctx.arc(bx, by, 17, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1a1a3a"; ctx.font = `700 24px ${FONT}`; ctx.fillText("!", bx, by + 1);
+    ctx.globalAlpha = 1;
+  }
+
+  // Muncher
+  const p = G.player, pos = playerPos(now);
+  if (G.state === "caught") {
+    const k = Math.min(1, (now - G.caughtAt) / 1100);
+    drawMuncher(ctx, pos.x, pos.y, { dir: p.dir, open: true, angle: k * 9, scale: 1 - k });
+  } else {
+    const blink = G.state === "playing" && G.t < p.safeUntil && Math.floor(now / 130) % 2 === 0;
+    drawMuncher(ctx, pos.x, pos.y - 14, { r: 28, dir: p.dir, open: now < p.mouthUntil, mood: p.mood, alpha: blink ? 0.35 : 1 });
+    // The number under the muncher stays readable, just below it
+    const here = cellAt(p.col, p.row);
+    if (here && !here.eaten) {
+      labelFont(here);
+      const size = Math.round(here.fontSize * 0.8);
+      ctx.font = `600 ${size}px ${FONT}`;
+      ctx.lineWidth = 7; ctx.lineJoin = "round"; ctx.strokeStyle = COL.tileEdge;
+      ctx.strokeText(here.label, cxOf(p.col), cyOf(p.row) + 30);
+      ctx.fillStyle = COL.cream; ctx.fillText(here.label, cxOf(p.col), cyOf(p.row) + 30);
+    }
+  }
+
+  // Troggles
+  for (const tr of G.troggles) {
+    const q = trogglePos(tr, now);
+    const alpha = tr.goneAt ? Math.max(0, (tr.goneAt - now) / 300) : 1;
+    drawTroggle(ctx, q.x, q.y, { type: tr.type, dx: tr.dx, dy: tr.dy, now, alpha });
+  }
+
+  // Particles
+  for (let i = G.particles.length - 1; i >= 0; i--) {
+    const pt = G.particles[i], age = now - pt.born;
+    if (age > 650) { G.particles.splice(i, 1); continue; }
+    const f = age / 16;
+    ctx.globalAlpha = 1 - age / 650;
+    ctx.fillStyle = pt.color;
+    ctx.fillRect(pt.x + pt.vx * f, pt.y + pt.vy * f + 0.04 * f * f, 6, 6);
+  }
+  ctx.globalAlpha = 1;
+
+  // Floating text (+10, facts, level clear)
+  for (let i = G.floats.length - 1; i >= 0; i--) {
+    const fl = G.floats[i], life = fl.big ? 1300 : 1200, age = now - fl.born;
+    if (age > life) { G.floats.splice(i, 1); continue; }
+    const k = age / life;
+    ctx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+    ctx.font = `700 ${fl.big ? 56 : 26}px ${FONT}`;
+    ctx.lineWidth = fl.big ? 8 : 6; ctx.strokeStyle = COL.board; ctx.lineJoin = "round";
+    const y = fl.y - (fl.big ? 0 : 36 * k);
+    ctx.strokeText(fl.text, fl.x, y);
+    ctx.fillStyle = COL.gold; ctx.fillText(fl.text, fl.x, y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ============================ MAIN LOOP (only one, ever) ============================ */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(now - last, 100);
+  last = now;
+  if (G.state === "playing") { G.t += dt; updateGame(now); }
+  else if (G.state === "caught" && now - G.caughtAt > 1200) afterCaught(now);
+  else if (G.state === "cleared" && now - G.clearedAt > 1400) { G.level++; setupLevel(); }
+  draw(now);
+  if (G.state === "menu") drawTitle(now);
+  requestAnimationFrame(frame);
+}
+
+/* ============================ LAYOUT ============================ */
+function fit() {
+  const s = document.getElementById("stage").getBoundingClientRect();
+  viewScale = Math.max(0.2, Math.min(s.width / LW, s.height / LH));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = LW * viewScale + "px";
+  canvas.style.height = LH * viewScale + "px";
+  canvas.width = Math.round(LW * viewScale * dpr);
+  canvas.height = Math.round(LH * viewScale * dpr);
+}
+window.addEventListener("resize", fit);
+
+/* ============================ MENU ============================ */
+function savePrefs() { try { localStorage.setItem("munchers-prefs", JSON.stringify({ mode: G.modeKey, speed: G.speedKey })); } catch (e) {} }
+
+function renderMenu() {
+  const groups = document.getElementById("mode-groups");
+  groups.innerHTML = "";
+  for (const g of MODE_GROUPS) {
+    const row = document.createElement("div"); row.className = "group";
+    row.innerHTML = `<div class="group-label">${g.label}</div>`;
+    const ch = document.createElement("div"); ch.className = "choices";
+    for (const key of g.keys) {
+      const b = document.createElement("button");
+      b.className = "choice";
+      b.setAttribute("aria-pressed", key === G.modeKey);
+      b.innerHTML = `${MODES[key].name}<small>${MODES[key].sample}</small>`;
+      b.onclick = () => { G.modeKey = key; savePrefs(); renderMenu(); };
+      ch.appendChild(b);
+    }
+    row.appendChild(ch); groups.appendChild(row);
+  }
+  const sc = document.getElementById("speed-choices");
+  sc.innerHTML = "";
+  for (const [key, sp] of Object.entries(SETTINGS.SPEEDS)) {
+    const b = document.createElement("button");
+    b.className = "choice";
+    b.setAttribute("aria-pressed", key === G.speedKey);
+    b.innerHTML = `${sp.label}<small>${sp.sub}</small>`;
+    b.onclick = () => { G.speedKey = key; savePrefs(); renderMenu(); };
+    sc.appendChild(b);
+  }
+  document.getElementById("speed-note").textContent = SETTINGS.SPEEDS[G.speedKey].note;
+}
+document.getElementById("play-btn").addEventListener("click", startGame);
+
+// Title animation: the muncher chomps along a row of multiples
+const tctx = document.getElementById("title-canvas").getContext("2d");
+function drawTitle(now) {
+  const c = tctx;
+  c.setTransform(2, 0, 0, 2, 0, 0);
+  c.clearRect(0, 0, 240, 80);
+  const cycle = 3200, k = reduceMotion ? 0.12 : (now % cycle) / cycle;
+  const mx = 20 + k * 260;
+  const nums = ["3", "6", "9", "12"];
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = `600 22px ${FONT}`;
+  nums.forEach((n, i) => {
+    const x = 85 + i * 42;
+    if (mx < x - 10) { c.fillStyle = COL.gold; c.fillText(n, x, 42); }
+  });
+  const open = !reduceMotion && Math.floor(now / 140) % 2 === 0;
+  drawMuncher(c, mx, 40, { r: 24, open });
+}
+
+/* ============================ START UP ============================ */
+(function boot() {
+  const params = new URLSearchParams(location.search);
+  let prefs = {};
+  try { prefs = JSON.parse(localStorage.getItem("munchers-prefs") || "{}"); } catch (e) {}
+  const m = params.get("mode") || prefs.mode, s = params.get("speed") || prefs.speed;
+  if (MODES[m]) G.modeKey = m;
+  if (SETTINGS.SPEEDS[s]) G.speedKey = s;
+  G.speed = SETTINGS.SPEEDS[G.speedKey];
+  fit();
+  renderMenu();
+  const go = () => { fit(); requestAnimationFrame(frame); };
+  if (document.fonts && document.fonts.load) {
+    Promise.race([document.fonts.load(`600 40px Fredoka`), new Promise(r => setTimeout(r, 1500))]).then(go, go);
+  } else go();
+})();
+</script>
+</body>
+</html>
